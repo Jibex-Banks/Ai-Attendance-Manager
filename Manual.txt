@@ -1,0 +1,13 @@
+To use this project you need to use the virtual environment 
+create a virtual environment by running
+``` py -3.11 -m venv venv ````
+Note: python -3.11 is the version is used for this project so you might need to download it.
+Then install a pythouch CPU 
+``` pip install torch --index-url https://download.pytorch.org/whl/cpu ```
+
+Then install this specific version of hugging-face and transformer
+``` pip install huggingface_hub==0.11.1 transformers==4.25.1 tokenizers==0.13.3 ```
+Then install the imgbeddings
+``` pip install imgbeddings ```
+Then install these dependencies
+``` pip install opencv-python imgbeddings psycopg2-binary ```
