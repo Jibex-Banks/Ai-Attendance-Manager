@@ -6,7 +6,7 @@ from sqlalchemy import create_engine, text
 from dotenv import load_dotenv
 from flask import jsonify
 import os
-from face_utils import extract_face, convert_image_to_vector, validate_student_face
+from face_utils import extract_face, convert_image_to_vector, validate_student_face, to_pgvector
 
 
 app = Flask(__name__)
@@ -43,7 +43,7 @@ def register_student():
                 "email": email,
                 "phone_number": phone_number,
                 "department": department,
-                "face_embedding": face_embedding.tolist(),
+                "face_embedding": to_pgvector(face_embedding),
                 "passport_path": passport_path
             }
             )
@@ -58,11 +58,10 @@ def register_student():
 def mark_attendance():
     data = request.get_json()
     file_path = data['image']
-    embedding = convert_image_to_vector(file_path)
+    img = extract_face(file_path)
+    embedding = convert_image_to_vector(img)
     result = validate_student_face(embedding)
     return jsonify({"message":str(result)})
-
-
 
 
 if __name__ == "__main__":
