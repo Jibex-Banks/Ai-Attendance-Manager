@@ -10,8 +10,6 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.dialects.postgresql import JSONB
 from dotenv import load_dotenv
-
-# face utilities (reuse your implementations)
 from face_utils import extract_face, convert_image_to_vector, validate_student_face, to_pgvector
 
 # load env
@@ -60,8 +58,8 @@ class Attendance(db.Model):
     attendance_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     student_id = db.Column(db.BigInteger, db.ForeignKey("students.student_id"), nullable=False)
     class_id = db.Column(db.BigInteger, db.ForeignKey("classes.class_id"))
-    date = db.Column(db.Date, default=datetime.utcnow)
-    in_time = db.Column(db.DateTime, default=datetime.utcnow)
+    date = db.Column(db.Date, default=datetime.now)
+    in_time = db.Column(db.DateTime, default=datetime.now)
     out_time = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.Text, nullable=False)
 
@@ -78,7 +76,7 @@ class Report(db.Model):
     student_id = db.Column(db.BigInteger, db.ForeignKey("students.student_id"), nullable=False)
     attendance_percentage = db.Column(db.Numeric(5,2))
     remarks = db.Column(db.Text)
-    generated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    generated_at = db.Column(db.DateTime, default=datetime.now)
 
 # Helper: simple publisher for SSE (in-memory)
 _attendance_event_queue = []

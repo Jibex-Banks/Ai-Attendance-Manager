@@ -6,6 +6,7 @@ import Students from "./pages/Students";
 import Attendance from "./pages/Attendance";
 import Register from "./pages/Register";
 import Scan from "./pages/Scan";
+import './index.css';
 
 export default function App() {
   return (
