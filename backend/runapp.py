@@ -1,4 +1,3 @@
-# app.py
 import os
 import tempfile
 import base64
@@ -60,15 +59,15 @@ class Student(db.Model):
     # pgvector column (512 dim). If your embeddings size differs, change the number.
     face_embedding = db.Column(Vector(512), nullable=False)
     passport_path = db.Column(db.Text)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=datetime.now())
 
 class Attendance(db.Model):
     __tablename__ = "attendance"
     attendance_id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
     student_id = db.Column(db.BigInteger, db.ForeignKey("students.student_id"), nullable=False)
     class_id = db.Column(db.BigInteger, db.ForeignKey("classes.class_id"))
-    date = db.Column(db.Date, default=datetime.utcnow)
-    in_time = db.Column(db.DateTime, default=datetime.utcnow)
+    date = db.Column(db.Date, default=datetime.now())
+    in_time = db.Column(db.DateTime, default=datetime.now())
     out_time = db.Column(db.DateTime, nullable=True)
     status = db.Column(db.Text, nullable=False)
 
@@ -85,7 +84,7 @@ class Report(db.Model):
     student_id = db.Column(db.BigInteger, db.ForeignKey("students.student_id"), nullable=False)
     attendance_percentage = db.Column(db.Numeric(5, 2))
     remarks = db.Column(db.Text)
-    generated_at = db.Column(db.DateTime, default=datetime.utcnow)
+    generated_at = db.Column(db.DateTime, default=datetime.now())
 
 # ----------------------- UTILITIES -----------------------
 
@@ -242,7 +241,6 @@ def create_class():
         return jsonify({"error":"class_name required"}), 400
 
     c = ClassModel(class_name=class_name, faculty_id=faculty_id)
-    # optional: parse times if provided (expect "HH:MM:SS" or "HH:MM")
     try:
         if start:
             from datetime import time as dtime
@@ -298,23 +296,49 @@ def create_faculty():
 
     return jsonify({"message":"faculty created", "faculty_id": f.faculty_id}), 201
 
-# ----------------------- ATTENDANCE (mark + get) -----------------------
+# ----------------------- ATTENDANCE ----------------------- #
 
 @app.route("/attendance", methods=["GET"])
 def get_attendance():
-    records = Attendance.query.order_by(Attendance.date.desc(), Attendance.in_time.desc()).limit(1000).all()
+    # records = Attendance.query.order_by(Attendance.date.desc(), Attendance.in_time.desc()).limit(1000).all()
+    today = datetime.now().date()
+    records = Attendance.query.filter(Attendance.date == today).all()
     out = []
     for a in records:
+        student = Student.query.get_or_404(a.student_id)
+        n_class = ClassModel.query.get_or_404(a.class_id)
+        name = student.name
         out.append({
             "attendance_id": a.attendance_id,
-            "student_id": a.student_id,
-            "class_id": a.class_id,
+            "student": name,
+            "class": n_class.class_name,
             "date": a.date.isoformat() if a.date else None,
             "in_time": a.in_time.isoformat() if a.in_time else None,
             "out_time": a.out_time.isoformat() if a.out_time else None,
             "status": a.status
         })
     return jsonify(out), 200
+
+@app.route("/attendance/<int:classId>", methods=["GET"])
+def get_class_attendance(classId):
+    # records = Attendance.query.order_by(Attendance.date.desc(), Attendance.in_time.desc()).limit(1000).all()
+    records = Attendance.query.filter_by(date = datetime.now().date(), class_id = classId).all()
+    out = []
+    for a in records:
+        student = Student.query.get_or_404(a.student_id)
+        n_class = ClassModel.query.get_or_404(a.class_id)
+        name = student.name
+        out.append({
+            "attendance_id": a.attendance_id,
+            "student": name,
+            "class": n_class.class_name,
+            "date": a.date.isoformat() if a.date else None,
+            "in_time": a.in_time.isoformat() if a.in_time else None,
+            "out_time": a.out_time.isoformat() if a.out_time else None,
+            "status": a.status
+        })
+    return jsonify(out), 200
+
 
 @app.route("/mark_attendance", methods=["POST"])
 def mark_attendance():
@@ -329,7 +353,7 @@ def mark_attendance():
         return jsonify({"error":"Invalid JSON"}), 400
 
     img = data.get("image")
-    class_id = data.get("class_id")
+    class_id = int(data.get("class_id"))
     if not img:
         return jsonify({"error":"image required"}), 400
 
@@ -356,7 +380,7 @@ def mark_attendance():
         if embedding is None:
             return jsonify({"error":"Failed to compute embedding"}), 400
 
-        emb_str = to_pgvector(embedding)  # string compatible with SQL casting
+        emb_str = to_pgvector(embedding)
         row = None
         distance = None
 
@@ -388,7 +412,6 @@ def mark_attendance():
 
         if row is not None:
             try:
-                # row may behave like mapping or tuple
                 distance = row["distance"]
             except Exception:
                 try:
@@ -400,7 +423,7 @@ def mark_attendance():
                         distance = None
 
         match = None
-        THRESHOLD = float(os.getenv("MATCH_THRESHOLD", "0.35"))
+        THRESHOLD = float(os.getenv("MATCH_THRESHOLD", "0.25"))
 
         if row is not None and distance is not None and float(distance) <= THRESHOLD:
             try:
@@ -427,7 +450,7 @@ def mark_attendance():
                 match = best.passport_path
 
         if not match:
-            return jsonify({"result":"Match Not Found"}), 200
+            return jsonify({"result":"Match Not Found", "status": "unknown"}), 200
 
         student = Student.query.filter_by(passport_path=match).first()
         if student is None:
@@ -440,28 +463,72 @@ def mark_attendance():
         if student is None:
             return jsonify({"error":"Matched student not found in DB"}), 500
 
-        # create attendance record
-        rec = Attendance(
+        # Check for today's attendance in this specific class
+        today_date = datetime.now().date()
+        existing_attendance = Attendance.query.filter_by(
             student_id=student.student_id,
-            class_id=class_id,
-            date=datetime.utcnow().date(),
-            in_time=datetime.utcnow(),
-            status="Present"
-        )
-        db.session.add(rec)
-        db.session.commit()
+            date=today_date,
+            class_id=class_id
+        ).first()
 
-        # publish event to SSE queue
-        payload = {
-            "attendance_id": rec.attendance_id,
-            "student_id": rec.student_id,
-            "class_id": rec.class_id,
-            "in_time": rec.in_time.isoformat(),
-            "status": rec.status
-        }
-        publish_attendance_event(payload)
+        if existing_attendance:
+            # Student already marked in - update out_time
+            if existing_attendance.out_time is None:
+                existing_attendance.out_time = datetime.now()
+                db.session.commit()
+                
+                payload = {
+                    "attendance_id": existing_attendance.attendance_id,
+                    "student_id": existing_attendance.student_id,
+                    "student_name": student.name,
+                    "class_id": existing_attendance.class_id,
+                    "in_time": existing_attendance.in_time.isoformat(),
+                    "out_time": existing_attendance.out_time.isoformat(),
+                    "status": existing_attendance.status
+                }
+                publish_attendance_event(payload)
+                
+                return jsonify({
+                    "result": "Goodbye! See you next time.",
+                    "status": "checked_out",
+                    "student_name": student.name,
+                    "out_time": existing_attendance.out_time.isoformat()
+                }), 200
+            else:
+                return jsonify({
+                    "result": "Already checked out for today",
+                    "status": "already_complete",
+                    "student_name": student.name
+                }), 200
+        else:
+            # Create new attendance record (check-in)
+            rec = Attendance(
+                student_id=student.student_id,
+                class_id=class_id,
+                date=today_date,
+                in_time=datetime.now(),
+                status="Present"
+            )
+            db.session.add(rec)
+            db.session.commit()
 
-        return jsonify({"result":"Matched", "student_id": student.student_id, "attendance_id": rec.attendance_id}), 200
+            # Publish event to SSE queue
+            payload = {
+                "attendance_id": rec.attendance_id,
+                "student_id": rec.student_id,
+                "student_name": student.name,
+                "class_id": rec.class_id,
+                "in_time": rec.in_time.isoformat(),
+                "status": rec.status
+            }
+            publish_attendance_event(payload)
+
+            return jsonify({
+                "result": "Welcome to class!",
+                "status": "checked_in",
+                "student_name": student.name,
+                "in_time": rec.in_time.isoformat()
+            }), 200
 
     except Exception as e:
         db.session.rollback()
@@ -472,6 +539,54 @@ def mark_attendance():
                 os.unlink(f)
             except Exception:
                 pass
+
+@app.route("/mark_absent/<int:class_id>", methods=["POST"])
+def mark_remaining_absent(class_id):
+    """
+    Marks all enrolled students who haven't been detected as absent.
+    Should be called at the end of class period.
+    """
+    try:
+        today_date = datetime.now().date()
+        
+        # Get all students
+        all_students = Student.query.all()
+        
+        # Get students already marked present today in this class
+        present_student_ids = {
+            a.student_id for a in 
+            Attendance.query.filter_by(
+                date=today_date,
+                class_id=class_id,
+                status="Present"
+            ).all()
+        }
+        
+        # Mark absent for those not present
+        absent_count = 0
+        for student in all_students:
+            if student.student_id not in present_student_ids:
+                absent_record = Attendance(
+                    student_id=student.student_id,
+                    class_id=class_id,
+                    date=today_date,
+                    status="Absent"
+                )
+                db.session.add(absent_record)
+                absent_count += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            "message": f"Marked {absent_count} students as absent",
+            "class_id": class_id,
+            "date": today_date.isoformat()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to mark absences: {str(e)}"}), 500
+    
 
 # ----------------------- REPORTS -----------------------
 

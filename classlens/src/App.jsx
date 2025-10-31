@@ -6,7 +6,8 @@ import Students from "./pages/Students";
 import Attendance from "./pages/Attendance";
 import Register from "./pages/Register";
 import Scan from "./pages/Scan";
-import './index.css';
+import Admin from "./pages/Admin";
+import "./index.css";
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
         <Route path="/attendance" element={<Attendance />} />
         <Route path="/register" element={<Register />} />
         <Route path="/scan" element={<Scan />} />
+        <Route path="/admin" element={<Admin />} />
       </Routes>
     </div>
   );

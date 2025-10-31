@@ -10,7 +10,7 @@ import os
 # Extracting the face and preprocessing from the image
 def extract_face(passport_path):
     # load Haar cascade properly
-    haar_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    haar_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml" 
     haar_cascade = cv2.CascadeClassifier(haar_path)
 
     if haar_cascade.empty():
@@ -67,7 +67,7 @@ def validate_student_face(embedding):
                 {"embedding": embedding_str}
             ).fetchone()
 
-            if row is None or row.distance > 0.35:
+            if row is None or row.distance > 0.25:
                 return "Match Not Found"
             return row[1]
     except Exception as e:
